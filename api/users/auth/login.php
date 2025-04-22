@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
      }
 
     // Verify password
-    if (!password_verify($password, $user["password"])) {
+    if (!password_verify($password, $user["user_password"])) {
         $text = $api_response_class_call::$passwordIncorrect;
         $errorcode = $api_error_code_class_call::$internalUserWarning;
         $maindata = [];

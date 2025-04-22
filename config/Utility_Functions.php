@@ -51,24 +51,79 @@ class Utility_Functions  extends DB_Connect
 }
 
     }
+    public static function generateShortKey($strength){
+        $input = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        $output = static::generate_string($input, $strength);
 
-
-    public static function getSubscriptionPlan($plan_id)
-    {
-        $conn = static::getDB();
-
-        $query = "SELECT * FROM subscriptions WHERE id = ?";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $plan_id);
+        return $output;
+    }
+    public static function generate_string($input, $strength){
+        $input_length = strlen($input);
+        $random_string = '';
+        for ($i = 0; $i < $strength; $i++) {
+            $random_character = $input[mt_rand(0, $input_length - 1)];
+            $random_string .= $random_character;
+        }
+    
+        return $random_string;
+    }
+    public static function checkIfCodeisInDB($tableName, $field ,$pubkey) {
+        $connect = static::getDB();
+        $alldata = [];
+        // Check if the email or phone number is already in the database
+        $query = "SELECT $field FROM $tableName WHERE $field = ?";
+        $stmt = $connect->prepare($query);
+        $stmt->bind_param("s", $pubkey);
         $stmt->execute();
         $result = $stmt->get_result();
-        $plan = $result->fetch_assoc();
-        $stmt->close();
+        $num_row = $result->num_rows;
 
-        return $plan;
+        if ($num_row > 0){
+            return true;
+        }
+
+        return false;
+        
+    }
+    public static function generateUniqueShortKey($tableName, $field){
+        $loop = 0;
+        while ($loop == 0){
+            $userKey = "SVT".static::generateShortKey(5);
+            if ( static::checkIfCodeisInDB($tableName, $field ,$userKey) ){
+                $loop = 0;
+            }else {
+                $loop = 1;
+                break;
+            }
+        }
+
+        return $userKey;
     }
     
-    
+    public static function generatePubKey($strength){
+        $input = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        $output = static::generate_string($input, $strength);
+
+        return $output;
+    }
+    public static function generateUniquePubKey($tableName, $field){
+        //add role to your generate function
+        //if user (checkIfPubKeyisInDB), return $userkey
+        //else if admin (checkIfIsAdmin), return $adminkey
+        //else (checkIfPubKeyisInDB), so we wont edit all api
+        $loop = 0;
+        while ($loop == 0){
+            $userKey = "SVT".static::generatePubKey(37). $tableName;
+            if ( static::checkIfCodeisInDB($tableName,$field,$userKey) ){
+                $loop = 0;
+            }else {
+                $loop = 1;
+                break;
+            }
+        }
+
+        return $userKey;
+    }
     public static function getCurrentFullURL(){
         $protocol = strtolower(substr($_SERVER["SERVER_PROTOCOL"],0,strpos( $_SERVER["SERVER_PROTOCOL"],'/'))).'://';
         // Get the server name and port
@@ -115,99 +170,10 @@ class Utility_Functions  extends DB_Connect
         
         return $salt;
     }
-
-    public static function takeAttendance($user_id, $mac_address)
-    {
-        $connect = static::getDB();
-    
-        $insertAttendance = $connect->prepare("INSERT INTO attendance (user_id, mac_address, attendance_time_in, attendance_date) VALUES (?, ?, ?, ?)");
-    
-        // Get the current date and time
-        $attendance_date = date('Y-m-d');
-        $attendance_time_in = date('H:i:s');
-    
-        // Specify the data types for the parameters
-        $insertAttendance->bind_param("isss", $user_id, $mac_address, $attendance_time_in, $attendance_date);
-    
-        // Execute the insert query
-        if ($insertAttendance->execute()) {
-            // Return true to indicate success
-            return true;
-        } else {
-            // Handle the case where the insert query fails (e.g., return false or an error code)
-            return false;
-        }
-    }
    
-    public static function takeAttendanceOut($user_id)
-        {
-            $connect = static::getDB();
-        
-            $attendance_date = date('Y-m-d');
-            $attendance_time_out = date('H:i:s');
-        
-            // Use an SQL UPDATE statement to update the existing record
-            $updateAttendanceOut = $connect->prepare("UPDATE attendance SET attendance_time_out = ? WHERE attendance_date = ? AND user_id = ?");
-        
-            // Bind parameters and values
-            $updateAttendanceOut->bind_param("ssi", $attendance_time_out, $attendance_date, $user_id);
-        
-            // Execute the update query
-            if ($updateAttendanceOut->execute()) {
-                // Return true to indicate success
-                return true;
-            } else {
-                // Handle the case where the update query fails (e.g., return false or an error code)
-                return false;
-            }
-        }
-    
-     public static function startFreeTrial($company_name)
-        {
-            // Input type checks if it's from a post request or just a normal function call
-            $connect = static::getDB();
-        
-            // Calculate the end date of the free trial (7 days from the current date)
-            $trialStartDate = date('Y-m-d', strtotime('+7 days'));
-            $trialEndDate = date('Y-m-d', strtotime('+7 days'));
-        
-            // Prepare the SQL statement for updating the subscription end date
-            $startFreeTrial = $connect->prepare("UPDATE companies SET subscription_end_date = ? WHERE company_name = ?");
-        
-            // Bind parameters and values
-            $startFreeTrial->bind_param("ss",  $trialStartDate, $trialEndDate, $company_name);
-        
-            // Execute the update query
-            if ($startFreeTrial->execute()) {
-                // Return true to indicate success
-                return true;
-            } else {
-                // Handle the case where the update query fails (e.g., return false or an error code)
-                return false;
-            }
-        }
-    
-
-    public static function updateUserProfile($new_name, $new_email, $new_deparment, $new_description, $user_pubkey)
-    {
-        $connect = static::getDB();
-
-        // Prepare the SQL statement for updating the user profile
-        $updateProfile = $connect->prepare("UPDATE users SET fullname = ?, email = ?, department = ?, job_description = ? WHERE pub_key = ?");
-
-      
-        // Bind parameters and values
-        $updateProfile->bind_param("sssss", $new_name, $new_email, $new_deparment,  $new_description, $user_pubkey);
-
-        // Execute the update query
-        if ($updateProfile->execute()) {
-            // Return true to indicate success
-            return true;
-        } else {
-            // Handle the case where the update query fails (e.g., return false or an error code)
-            return false;
-        }
-    }
+    public static function inputData($data, $key) {
+        return isset($data->$key) ? self::escape($data->$key) : "";
+    }   
    
     public static  function greetUsers(){
         $welcome_string="Welcome!";
@@ -269,238 +235,287 @@ class Utility_Functions  extends DB_Connect
             throw new \ErrorException($message, 0, $level, $file, $line);
         }
     }
+    public static function safeEscape($data, $key) {
+        return isset($data->$key) ? self::escape($data->$key) : "";
+    }
+    
+    public static function updateUserProfile($new_name, $new_email, $new_deparment, $new_description, $user_pubkey)
+    {
+        $connect = static::getDB();
 
-   public static function validateAttendanceLocation($latitude, $longitude, $validLatitude, $validLongitude)
-{
-    $latitude = floatval($latitude);
-    $longitude = floatval($longitude);
-    $validLatitude = floatval($validLatitude);
-    $validLongitude = floatval($validLongitude);
+        // Prepare the SQL statement for updating the user profile
+        $updateProfile = $connect->prepare("UPDATE users SET fullname = ?, email = ?, department = ?, job_description = ? WHERE pub_key = ?");
 
-    $allowedDistance = 100; // in meters
-    $distance = self::calculateDistance($latitude, $longitude, $validLatitude, $validLongitude);
+        
+        // Bind parameters and values
+        $updateProfile->bind_param("sssss", $new_name, $new_email, $new_deparment,  $new_description, $user_pubkey);
 
-    return $distance <= $allowedDistance;
-}
+        // Execute the update query
+        if ($updateProfile->execute()) {
+            // Return true to indicate success
+            return true;
+        } else {
+            // Handle the case where the update query fails (e.g., return false or an error code)
+            return false;
+        }
+    }
 
+    public static function adminUpdateUserProfile($newName, $newEmail, $newDepartment, $newGender, $newStatus, $user_pubkey)
+    {
+        $connect = static::getDB();
 
-    public static function getUserAttendanceByDateRange($userid, $startDate, $endDate)
+        // Prepare the SQL statement for updating the user profile
+        $updateProfile = $connect->prepare("UPDATE users SET fullname = ?, email = ?, department = ?, gender = ?,status = ? WHERE pub_key = ?");
+
+      
+        // Bind parameters and values
+        $updateProfile->bind_param("ssssss", $newName, $newEmail, $newDepartment, $newGender, $newStatus, $user_pubkey);
+
+        // Execute the update query
+        if ($updateProfile->execute()) {
+            // Return true to indicate success
+            return true;
+        } else {
+            // Handle the case where the update query fails (e.g., return false or an error code)
+            return false;
+        }
+    }
+    public static function updateAdminProfilePic($photopath, $email)
+    {
+        $connect = static::getDB();
+
+        // Prepare the SQL statement for updating the user profile
+        $updateProfile = $connect->prepare("UPDATE admins SET profile_pic = ? WHERE email = ?");
+
+      
+        // Bind parameters and values
+        $updateProfile->bind_param("ss", $photopath, $email);
+
+        // Execute the update query
+        if ($updateProfile->execute()) {
+            // Return true to indicate success
+            return true;
+        } else {
+            // Handle the case where the update query fails (e.g., return false or an error code)
+            return false;
+        }
+    }
+    public static function updateUserProfilePic($photopath, $email)
+    {
+        $connect = static::getDB();
+
+        // Prepare the SQL statement for updating the user profile
+        $updateProfile = $connect->prepare("UPDATE users SET profile_pic = ? WHERE email = ?");
+
+      
+        // Bind parameters and values
+        $updateProfile->bind_param("ss", $photopath, $email);
+
+        // Execute the update query
+        if ($updateProfile->execute()) {
+            // Return true to indicate success
+            return true;
+        } else {
+            // Handle the case where the update query fails (e.g., return false or an error code)
+            return false;
+        }
+    }
+
+    public static function restrictUser($userid)
+    {
+        $conn = static::getDB();
+        $query = "UPDATE users SET status = 0 WHERE user_id = ?";
+        $stmt = $conn->prepare($query);
+        // Bind the parameter to the statement
+        $stmt->bind_param("s", $userid);
+        $result = $stmt->execute();
+        $stmt->close();
+
+        return $result;
+    }
+    public static function restrictAdmin($userid)
+    {
+        $conn = static::getDB();
+        $query = "UPDATE admins SET status = 0 WHERE company_id = ?";
+        $stmt = $conn->prepare($query);
+        // Bind the parameter to the statement
+        $stmt->bind_param("s", $userid);
+        $result = $stmt->execute();
+        $stmt->close();
+
+        return $result;
+    }
+
+    public static function addNotification($userid, $message)
     {
         $conn = static::getDB();
 
-        $query = "SELECT attendance_date, attendance_status FROM attendance WHERE user_id = ? AND attendance_date BETWEEN ? AND ?";
+        $query = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
         $stmt = $conn->prepare($query);
-        $stmt->bind_param("iss", $userid, $startDate, $endDate);
+        $stmt->bind_param("ss", $userid, $message);
+        $result = $stmt->execute();
+        $stmt->close();
+
+        return $result;
+    }
+
+    public static function addMessage($userid, $message, $email)
+    {
+        $conn = static::getDB();
+
+        $query = "INSERT INTO messages (user_id, message, email) VALUES (?, ?, ?)";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("sss", $userid, $message, $email);
+        $result = $stmt->execute();
+        $stmt->close();
+
+        return $result;
+    }
+
+    public static function getAdminMessages($email)
+    {
+        $conn = static::getDB();
+
+        $query = "SELECT * FROM messages WHERE email = ?";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("s", $email);
         $stmt->execute();
 
         $result = $stmt->get_result();
 
-        $attendanceData = [];
+        $unreadNotifications = [];
         while ($row = $result->fetch_assoc()) {
-            $attendanceData[$row['attendance_date']] = $row['attendance_status'];
+            $unreadNotifications[] = $row;
         }
 
         $stmt->close();
-        
-        return $attendanceData;
+
+        return $unreadNotifications;
     }
+    public static function getNotificationsForPreviousDay($userid)
+    {
+        $conn = static::getDB();
 
-    public static function addNotification($userid, $message)
-{
-    $conn = static::getDB();
-
-    $query = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("is", $userid, $message);
-    $result = $stmt->execute();
-    $stmt->close();
-
-    return $result;
-}
-
-
-public static function getUnreadNotifications($userid)
-{
-    $conn = static::getDB();
-
-    $query = "SELECT * FROM notifications WHERE user_id = ? AND is_read = 0";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("i", $userid);
-    $stmt->execute();
-
-    $result = $stmt->get_result();
-
-    $unreadNotifications = [];
-    while ($row = $result->fetch_assoc()) {
-        $unreadNotifications[] = $row;
-    }
-
-    $stmt->close();
-
-    return $unreadNotifications;
-}
-
-public static function markNotificationsAsRead($notifications)
-{
-    $conn = static::getDB();
-
-    // Check if there are notifications to mark as read
-    if (empty($notifications)) {
-        return; // No notifications to mark as read, so we can return early.
-    }
-
-    // Create an array of IDs from the $notifications array
-    $notificationIds = array_map(function ($notification) {
-        return $notification['id'];
-    }, $notifications);
-
-    // Generate placeholders for the IN clause
-    $placeholders = implode(',', array_fill(0, count($notificationIds), '?'));
-
-    // Prepare the SQL query
-    $query = "UPDATE notifications SET is_read = 1 WHERE id IN ($placeholders)";
-
-    // Prepare and execute the statement
-    $stmt = $conn->prepare($query);
-    
-    if ($stmt) {
-        $stmt->bind_param(str_repeat('i', count($notificationIds)), ...$notificationIds);
+        // Assuming 'notification_date' is the column representing the date of the notification
+        $query = "SELECT * FROM notifications WHERE user_id = ? AND DATE(dateandtime) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("s", $userid);
         $stmt->execute();
+
+        $result = $stmt->get_result();
+
+        $notificationsForPreviousDay = [];
+        while ($row = $result->fetch_assoc()) {
+            $notificationsForPreviousDay[] = $row;
+        }
+
         $stmt->close();
+
+        return $notificationsForPreviousDay;
     }
-}
+    public static function getNotificationsForCurrentDay($userid)
+    {
+        $conn = static::getDB();
 
+        // Assuming 'notification_date' is the column representing the date of the notification
+        $query = "SELECT * FROM notifications WHERE user_id = ? AND DATE(dateandtime) = CURDATE()";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("s", $userid);
+        $stmt->execute();
 
-    
+        $result = $stmt->get_result();
 
+        $notificationsForCurrentDay = [];
+        while ($row = $result->fetch_assoc()) {
+            $notificationsForCurrentDay[] = $row;
+        }
 
-public static function getAttendanceRecords($user_id, $start_date, $end_date)
-{
-    $conn = static::getDB();
+        $stmt->close();
 
-    $query = "SELECT * FROM attendance WHERE user_id = ? AND attendance_time_in BETWEEN ? AND ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("iss", $user_id, $start_date, $end_date);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $attendance_records = $result->fetch_all(MYSQLI_ASSOC);
-    $stmt->close();
-
-    return $attendance_records;
-}
-
-
-public static function takeAttendanceWithLocation($user_id, $latitude, $longitude)
-{
-    $conn = static::getDB();
-
-    // Implement your location validation logic here (e.g., comparing with a predefined valid location)
-
-    $is_valid_location = true; // Set to false if the location is invalid
-
-    $query = "INSERT INTO attendance (user_id, check_in_time, latitude, longitude, is_valid_location) VALUES (?, NOW(), ?, ?, ?)";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("iddi", $user_id, $latitude, $longitude, $is_valid_location);
-    $result = $stmt->execute();
-    $stmt->close();
-
-    return $result;
-}
-
-
-public static function createSubscription($company_id, $plan_id, $start_date, $end_date)
-{
-    $conn = static::getDB();
-
-    $query = "INSERT INTO subscriptions (company_id, plan_id, start_date, end_date) VALUES (?, ?, ?, ?)";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("iiss", $company_id, $plan_id, $start_date, $end_date);
-    $result = $stmt->execute();
-    $stmt->close();
-
-    return $result;
-}
-
-public static function getAdminSubscription($company_id)
-{
-    $conn = static::getDB();
-
-    $query = "SELECT * FROM subscriptions WHERE company_id = ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("i", $company_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $subscription = $result->fetch_assoc();
-    $stmt->close();
-
-    return $subscription;
-}
-
-public static function calculateSubscriptionEndDate($start_date, $duration) {
-    $end_date = null;
-    
-    switch ($duration) {
-        case 'monthly':
-            $end_date = date('Y-m-d', strtotime($start_date . ' + 1 month'));
-            break;
-        case 'quarterly':
-            $end_date = date('Y-m-d', strtotime($start_date . ' + 3 months'));
-            break;
-        case 'biannually':
-            $end_date = date('Y-m-d', strtotime($start_date . ' + 6 months'));
-            break;
-        case 'annually':
-            $end_date = date('Y-m-d', strtotime($start_date . ' + 1 year'));
-            break;
+        return $notificationsForCurrentDay;
     }
-    
-    return $end_date;
-}
-    
+    public static function getNotificationsForCurrentWeek($userid)
+    {
+        $conn = static::getDB();
 
+        // Assuming 'notification_date' is the column representing the date of the notification
+        $query = "SELECT * FROM notifications WHERE user_id = ? AND YEARWEEK(dateandtime) = YEARWEEK(CURDATE())";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("s", $userid);
+        $stmt->execute();
 
-public static function getAttendanceByUserAndDepartment($name, $department)
-{
-    $conn = static::getDB();
+        $result = $stmt->get_result();
 
-    $query = "SELECT users.name, users.department, attendance.mac_address, attendance.attendance_time_in, attendance.attendance_time_out
-              FROM attendance
-              INNER JOIN users ON attendance.user_id = users.id
-              WHERE users.name = ? AND users.department = ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("ss", $name, $department);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $attendance_records = $result->fetch_all(MYSQLI_ASSOC);
-    $stmt->close();
+        $notificationsForCurrentWeek = [];
+        while ($row = $result->fetch_assoc()) {
+            $notificationsForCurrentWeek[] = $row;
+        }
 
-    return $attendance_records;
-}
+        $stmt->close();
 
-     public static function adminLogout($userPubkey) {
-       
-        $admin = Users_Table::getAdminUserByKey($userPubkey);
-        if ($admin) {
-            Users_Table::updateAdminUserStatus($admin['id'], 'logged_out');
+        return $notificationsForCurrentWeek;
+    }
+
+    public static function getUnreadNotifications($userid)
+    {
+        $conn = static::getDB();
+
+        $query = "SELECT * FROM notifications WHERE user_id = ?";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("s", $userid);
+        $stmt->execute();
+
+        $result = $stmt->get_result();
+
+        $unreadNotifications = [];
+        while ($row = $result->fetch_assoc()) {
+            $unreadNotifications[] = $row;
+        }
+
+        $stmt->close();
+
+        return $unreadNotifications;
+    }
+
+    public static function markNotificationsAsRead($notifications)
+    {
+        $conn = static::getDB();
+
+        // Check if there are notifications to mark as read
+        if (empty($notifications)) {
+            return; // No notifications to mark as read, so we can return early.
+        }
+
+        // Create an array of IDs from the $notifications array
+        $notificationIds = array_map(function ($notification) {
+            return $notification['id'];
+        }, $notifications);
+
+        // Generate placeholders for the IN clause
+        $placeholders = implode(',', array_fill(0, count($notificationIds), '?'));
+
+        // Prepare the SQL query
+        $query = "UPDATE notifications SET is_read = 1 WHERE id IN ($placeholders)";
+
+        // Prepare and execute the statement
+        $stmt = $conn->prepare($query);
+        
+        if ($stmt) {
+            $stmt->bind_param(str_repeat('i', count($notificationIds)), ...$notificationIds);
+            $stmt->execute();
+            $stmt->close();
         }
     }
 
+    public static function adminLogout($userPubkey) {
+        
+            $admin = Users_Table::getAdminUserByKey($userPubkey);
+            if ($admin) {
+                Users_Table::updateAdminUserStatus($admin['id'], 'logged_out');
+            }
+        }
+
+    }
 
 
-
-private static function calculateDistance($lat1, $lon1, $lat2, $lon2)
-{
-    $theta = $lon1 - $lon2;
-    $dist = sin(deg2rad($lat1)) * sin(deg2rad($lat2)) +  cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * cos(deg2rad($theta));
-    $dist = acos($dist);
-    $dist = rad2deg($dist);
-    $miles = $dist * 60 * 1.1515;
-    $distance = ($miles * 1.609344) * 1000; // Convert to meters
-    return $distance;
-}
-
-
-}
-
-
-?>
+    ?>

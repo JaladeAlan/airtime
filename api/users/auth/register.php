@@ -11,21 +11,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $data = json_decode($request_body);
 
     // Extract registration data
-    $email = "";
-    if(isset($data->email)){
-        $email=$utility_class_call::escape($data->email);
-    }
-    $userid = "";
-    if(isset($data->userid)){
-        $userid=$utility_class_call::escape($data->userid);
-    }
-    $username = "";
-    if(isset($data->username)){
-        $username=$utility_class_call::escape($data->username);
-    }
-    $password = "";
-    if(isset($data->password)){
-        $password=$utility_class_call::escape($data->password);
+    $email = $utility_class_call::inputData($data, 'email');
+    $username = $utility_class_call::inputData($data, 'username');
+    $password = $utility_class_call::inputData($data, 'password');
+
         if(!$utility_class_call::validatePassword($password)){
             $text = $api_response_class_call::$weakPassword;
             $errorcode = $api_error_code_class_call::$internalUserWarning;
@@ -35,10 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $api_status_code_class_call->respondBadRequest($maindata, $text, $hint, $linktosolve, $errorcode);
         }      
          //Confirm password validations
-         $confirm_password = "";
-         if(isset($data->confirm_password)){
-             $confirm_password=$utility_class_call::escape($data->confirm_password);
-         }
+         $confirm_password = $utility_class_call::inputData($data, 'confirm_password');
          if($password != $confirm_password){
           $text = $api_response_class_call::$confirmPassword;
           $errorcode = $api_error_code_class_call::$internalUserWarning;
@@ -47,19 +33,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
           $linktosolve = "https://";
           $api_status_code_class_call->respondBadRequest($maindata, $text, $hint, $linktosolve, $errorcode);
          }
-    }
-    $firstname = "";
-    if(isset($data->firstname)){
-        $firstname=$utility_class_call::escape($data->firstname);
-    }
-    $lastname = "";
-    if(isset($data->lastname)){
-        $lastname=$utility_class_call::escape($data->lastname);
-    }
     
-    // Validate input data
-    if ($utility_class_call::validate_input($email) || $utility_class_call::validate_input($password) ||   $utility_class_call::validate_input($firstname) ||
-       $utility_class_call::validate_input($lastname) || $utility_class_call::validate_input($username) || $utility_class_call::validate_input($userid)) {
+    $firstname = $utility_class_call::inputData($data, 'firstname');
+    $lastname = $utility_class_call::inputData($data, 'lastname');
+    $phone = $utility_class_call::inputData($data, 'phone');
+    $bankname = $utility_class_call::inputData($data, 'bankname');
+    $accountno = $utility_class_call::inputData($data, 'accountno');
+    $referrer = $utility_class_call::inputData($data, 'referrer');
+    if (!$referrer) {
+        $referrer = null; 
+    }
+
+        // Validate input data
+    if ($utility_class_call::validate_input($email) || $utility_class_call::validate_input($password) || 
+       $utility_class_call::validate_input($firstname) ||  $utility_class_call::validate_input($lastname) ||
+       $utility_class_call::validate_input($bankname) ||  $utility_class_call::validate_input($phone) ||
+       $utility_class_call::validate_input($accountno) ||  $utility_class_call::validate_input($referrer) ||
+       $utility_class_call::validate_input($username) ) {
         $text = $api_response_class_call::$invalidInfo;
         $errorcode = $api_error_code_class_call::$internalUserWarning;
         $maindata = [];
@@ -100,7 +90,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $hashPassword = Utility_Functions::Password_encrypt($password);
  
     // Insert user data into the database
-    $user_id = $api_users_table_class_call::insertUser($userid, $username, $hashPassword, $email, $firstname, $lastname);
+    $user_id = $api_users_table_class_call::insertUser($username, $hashPassword, $email, $firstname, $lastname,
+     $accountno, $bankname, $phone, $referrer);
 
     if ($user_id) {
         // Respond with a success message
