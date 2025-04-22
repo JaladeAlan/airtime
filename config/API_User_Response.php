@@ -26,6 +26,7 @@ class API_User_Response
     public static $logoutSuccessful="LogOut Successful";
     public static $unauthorized_token="Unauthorized user";
     public static $userExists="Username already exists";
+    public static $phoneExists="Phone number already exists";
     public static $companyExists="Company already exists";
     public static $userNotExist="User does not exist";
     public static $emailExists="Email Already exists";

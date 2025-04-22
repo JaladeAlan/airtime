@@ -235,10 +235,7 @@ class Utility_Functions  extends DB_Connect
             throw new \ErrorException($message, 0, $level, $file, $line);
         }
     }
-    public static function safeEscape($data, $key) {
-        return isset($data->$key) ? self::escape($data->$key) : "";
-    }
-    
+  
     public static function updateUserProfile($new_name, $new_email, $new_deparment, $new_description, $user_pubkey)
     {
         $connect = static::getDB();

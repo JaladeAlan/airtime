@@ -110,8 +110,8 @@ class Users_Table extends Config\DB_Connect
                 return false;
             }
         }
-   
-    public static function getUserByUsername($username= "",$data="*")
+
+        public static function getUserByUsername($username= "",$data="*")
         {
             //input type checks if its from post request or just normal function call
             $connect = static::getDB();
@@ -120,6 +120,25 @@ class Users_Table extends Config\DB_Connect
             $data = is_string($data) ? $data : "*";
             $checkdata = $connect->prepare("SELECT $data FROM users WHERE username = ?");
             $checkdata->bind_param("s", $username);
+            $checkdata->execute();
+            $getresultemail = $checkdata->get_result();
+            if ($getresultemail->num_rows > 0) {
+                $getthedata = $getresultemail->fetch_assoc();
+                $alldata = $getthedata;
+            }
+            return $alldata;
+
+        }
+   
+        public static function getUserByPhone($phone= "",$data="*")
+        {
+            //input type checks if its from post request or just normal function call
+            $connect = static::getDB();
+            $alldata = [];
+
+            $data = is_string($data) ? $data : "*";
+            $checkdata = $connect->prepare("SELECT $data FROM users WHERE phoneNo = ?");
+            $checkdata->bind_param("s", $phone);
             $checkdata->execute();
             $getresultemail = $checkdata->get_result();
             if ($getresultemail->num_rows > 0) {

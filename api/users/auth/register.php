@@ -77,6 +77,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $linktosolve = "https://";
         $api_status_code_class_call->respondBadRequest($maindata, $text, $hint, $linktosolve, $errorcode);
     }
+    if ($api_users_table_class_call::getUserByPhone($phone, $data)) {
+        $text = $api_response_class_call::$phoneExists;
+        $errorcode = $api_error_code_class_call::$internalUserWarning;
+        $maindata = [];
+        $hint = ["A user with this Phone number already exists."];
+        $linktosolve = "https://";
+        $api_status_code_class_call->respondBadRequest($maindata, $text, $hint, $linktosolve, $errorcode);
+    }
     if ($api_users_table_class_call::getUserByEmail($email , $data)) {
         $text = $api_response_class_call::$emailExists;
         $errorcode = $api_error_code_class_call::$internalUserWarning;
