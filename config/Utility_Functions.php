@@ -343,19 +343,16 @@ class Utility_Functions  extends DB_Connect
         return $result;
     }
 
-    public static function addNotification($userid, $message)
+    public static function addNotification($user_pubkey, $title, $message, $type = 'info')
     {
-        $conn = static::getDB();
-
-        $query = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("ss", $userid, $message);
-        $result = $stmt->execute();
-        $stmt->close();
-
-        return $result;
+        $connect = static::getDB();
+    
+        $query = $connect->prepare("INSERT INTO notifications (user_pubkey, title, message, type) VALUES (?, ?, ?, ?)");
+        $query->bind_param("ssss", $user_pubkey, $title, $message, $type);
+    
+        return $query->execute();
     }
-
+    
     public static function addMessage($userid, $message, $email)
     {
         $conn = static::getDB();
@@ -389,119 +386,53 @@ class Utility_Functions  extends DB_Connect
 
         return $unreadNotifications;
     }
-    public static function getNotificationsForPreviousDay($userid)
+  
+    public static function getUserNotifications($user_pubkey)
     {
-        $conn = static::getDB();
-
-        // Assuming 'notification_date' is the column representing the date of the notification
-        $query = "SELECT * FROM notifications WHERE user_id = ? AND DATE(dateandtime) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("s", $userid);
+        $connect = static::getDB();
+        $notifications = [];
+    
+        $stmt = $connect->prepare("SELECT id, title, message, is_read, created_at FROM notifications WHERE user_pubkey = ? ORDER BY created_at DESC");
+        $stmt->bind_param("s", $user_pubkey);
         $stmt->execute();
-
         $result = $stmt->get_result();
-
-        $notificationsForPreviousDay = [];
+    
         while ($row = $result->fetch_assoc()) {
-            $notificationsForPreviousDay[] = $row;
+            $row['is_read'] = (bool) $row['is_read']; 
+            $notifications[] = $row;
         }
-
-        $stmt->close();
-
-        return $notificationsForPreviousDay;
+    
+        return $notifications;
     }
-    public static function getNotificationsForCurrentDay($userid)
+    
+    public static function markNotificationAsRead($notification_id, $user_pubkey)
     {
-        $conn = static::getDB();
-
-        // Assuming 'notification_date' is the column representing the date of the notification
-        $query = "SELECT * FROM notifications WHERE user_id = ? AND DATE(dateandtime) = CURDATE()";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("s", $userid);
-        $stmt->execute();
-
-        $result = $stmt->get_result();
-
-        $notificationsForCurrentDay = [];
-        while ($row = $result->fetch_assoc()) {
-            $notificationsForCurrentDay[] = $row;
-        }
-
-        $stmt->close();
-
-        return $notificationsForCurrentDay;
+        $connect = static::getDB();
+        $query = $connect->prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_pubkey = ? AND is_read = 0");
+        $query->bind_param("is", $notification_id, $user_pubkey);
+        $query->execute();
+    
+        return $query->affected_rows > 0;
     }
-    public static function getNotificationsForCurrentWeek($userid)
+    
+
+    public static function markAllNotificationsAsRead($user_pubkey)
     {
-        $conn = static::getDB();
-
-        // Assuming 'notification_date' is the column representing the date of the notification
-        $query = "SELECT * FROM notifications WHERE user_id = ? AND YEARWEEK(dateandtime) = YEARWEEK(CURDATE())";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("s", $userid);
-        $stmt->execute();
-
-        $result = $stmt->get_result();
-
-        $notificationsForCurrentWeek = [];
-        while ($row = $result->fetch_assoc()) {
-            $notificationsForCurrentWeek[] = $row;
-        }
-
-        $stmt->close();
-
-        return $notificationsForCurrentWeek;
+        $connect = static::getDB();
+        $query = $connect->prepare("UPDATE notifications SET is_read = 1 WHERE user_pubkey = ? AND is_read = 0");
+        $query->bind_param("s", $user_pubkey);
+        $query->execute();
+    
+        return $query->affected_rows > 0;
     }
-
-    public static function getUnreadNotifications($userid)
+    
+    
+    public static function deleteNotification($notification_id, $user_pubkey)
     {
-        $conn = static::getDB();
-
-        $query = "SELECT * FROM notifications WHERE user_id = ?";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("s", $userid);
-        $stmt->execute();
-
-        $result = $stmt->get_result();
-
-        $unreadNotifications = [];
-        while ($row = $result->fetch_assoc()) {
-            $unreadNotifications[] = $row;
-        }
-
-        $stmt->close();
-
-        return $unreadNotifications;
-    }
-
-    public static function markNotificationsAsRead($notifications)
-    {
-        $conn = static::getDB();
-
-        // Check if there are notifications to mark as read
-        if (empty($notifications)) {
-            return; // No notifications to mark as read, so we can return early.
-        }
-
-        // Create an array of IDs from the $notifications array
-        $notificationIds = array_map(function ($notification) {
-            return $notification['id'];
-        }, $notifications);
-
-        // Generate placeholders for the IN clause
-        $placeholders = implode(',', array_fill(0, count($notificationIds), '?'));
-
-        // Prepare the SQL query
-        $query = "UPDATE notifications SET is_read = 1 WHERE id IN ($placeholders)";
-
-        // Prepare and execute the statement
-        $stmt = $conn->prepare($query);
-        
-        if ($stmt) {
-            $stmt->bind_param(str_repeat('i', count($notificationIds)), ...$notificationIds);
-            $stmt->execute();
-            $stmt->close();
-        }
+        $connect = static::getDB();
+        $stmt = $connect->prepare("DELETE FROM notifications WHERE id = ? AND user_pubkey = ?");
+        $stmt->bind_param("is", $notification_id, $user_pubkey);
+        return $stmt->execute();
     }
 
     public static function adminLogout($userPubkey) {

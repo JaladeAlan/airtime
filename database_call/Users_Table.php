@@ -90,20 +90,46 @@ class Users_Table extends Config\DB_Connect
             }
         }
         
-    public static function insertAdminUser($password, $email, $fullname)
+    public static function insertSender($email, $name, $phone, $pubkey)
         {
             // Input type checks if its from post request or just normal function call
             $connect = static::getDB();
 
             // Prepare the SQL statement for inserting a new user
-            $insertAdminUser = $connect->prepare("INSERT INTO admins (ad_password, email, fullname) VALUES (?, ?, ?)");
+            $insertSender = $connect->prepare("INSERT INTO senders (sender_email, sender_name, sender_phoneNo, user_pubkey) VALUES (?, ?, ?, ?)");
 
             // Bind parameters and values
-            $insertAdminUser->bind_param("sss", $password, $email, $fullname);
+            $insertSender->bind_param("ssss", $email, $name, $phone, $pubkey);
 
             // Execute the insert query
-            if ($insertAdminUser->execute()) {
+            if ($insertSender->execute()) {
                 // Return the ID of the newly inserted user
+                return $connect->insert_id;
+            } else {
+                // Handle the case where the insert query fails (e.g., return an error code or message)
+                return false;
+            }
+        }
+
+        public static function insertTransaction($user_pubkey, $amount, $details, $reference, $type)
+        {
+            // Input type checks if it's from a post request or just a normal function call
+            $connect = static::getDB();
+
+            // Prepare the SQL statement for inserting a new transaction
+            $insertTransaction = $connect->prepare("INSERT INTO transactions 
+                (user_pubkey, transaction_Status, transaction_amount, transaction_details, transaction_reference, transaction_type) 
+                VALUES (?, ?, ?, ?, ?, ?)");
+
+            // Set the initial status as 'pending'
+            $transactionStatus = 'completed';
+
+            // Bind parameters and values
+            $insertTransaction->bind_param("ssssss", $user_pubkey, $transactionStatus, $amount, $details, $reference, $type);
+
+            // Execute the insert query
+            if ($insertTransaction->execute()) {
+                // Return the ID of the newly inserted transaction
                 return $connect->insert_id;
             } else {
                 // Handle the case where the insert query fails (e.g., return an error code or message)
@@ -128,6 +154,19 @@ class Users_Table extends Config\DB_Connect
             }
             return $alldata;
 
+        } 
+        
+        public static function getSenderByKey($pubKey, $email, $phone)
+        {
+            $connect = static::getDB();
+        
+            $query = "SELECT id FROM senders     WHERE user_pubkey = ? AND (sender_email = ? OR sender_phoneNo = ?)";
+            $stmt = $connect->prepare($query);
+            $stmt->bind_param("sss", $pubKey, $email, $phone);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            return $result->num_rows > 0;
         }
    
         public static function getUserByPhone($phone= "",$data="*")
@@ -330,6 +369,28 @@ class Users_Table extends Config\DB_Connect
                 return false;
             }
         }
+      
+        public static function updatePin($user_pubkey, $pin)
+        {
+            // Input type checks if it's from post request or just a normal function call
+            $connect = static::getDB();
+                    
+        
+            // Prepare the SQL statement for updating the user's pin
+            $updatePin = $connect->prepare("UPDATE users SET transaction_Pin = ? WHERE pub_key = ?");
+        
+            // Bind parameters and values
+            $updatePin->bind_param("ss", $pin, $user_pubkey);
+        
+            // Execute the update query
+            if ($updatePin->execute()) {
+                // Return true if the password was successfully updated
+                return true;
+            } else {
+                // Handle the case where the update query fails (e.g., return an error code or message)
+                return false;
+            }
+        }
     public static function updatePassword($user_pubkey, $hashPassword)
         {
             // Input type checks if it's from post request or just a normal function call
@@ -418,8 +479,7 @@ class Users_Table extends Config\DB_Connect
                     return null;
                 }
             }
-
-            
+     
     public static function storeAdminResetCode($code, $expiry, $email)
             {
                 $connect = static::getDB();
@@ -439,6 +499,7 @@ class Users_Table extends Config\DB_Connect
                     return false;
                 }
             } 
+
     public static function getAdminStoredResetCode($email)
             {
                 $connect = static::getDB();
@@ -465,6 +526,265 @@ class Users_Table extends Config\DB_Connect
                     return null;
                 }
             }
+
+            public static function storeOtp($receiver = "", $otp = "", $type = "", $expiryInMinutes = 5) 
+            {
+                $connect = static::getDB();
             
-       
+                $query = "
+                    REPLACE INTO otps (receiver, otp, type, created_at, expires_at, is_used)
+                    VALUES (?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL ? MINUTE), 0)
+                ";
+                $stmt = $connect->prepare($query);
+                $stmt->bind_param("sssi", $receiver, $otp, $type, $expiryInMinutes);
+                $stmt->execute();
+            }       
+
+            public static function verifyOtp($receiver = "", $otp = "", $type = "", $data = "*") 
+            {
+                $connect = static::getDB();
+                $alldata = [];
+            
+                $data = is_string($data) ? $data : "*";
+            
+                $stmt = $connect->prepare("
+                    SELECT $data FROM otps 
+                    WHERE receiver = ? AND otp = ? AND type = ? 
+                    AND expires_at >= NOW() AND is_used = 0
+                ");
+                $stmt->bind_param("sss", $receiver, $otp, $type);
+                $stmt->execute();
+                $result = $stmt->get_result();
+            
+                if ($result->num_rows > 0) {
+                    $alldata = $result->fetch_assoc();
+            
+                    // Mark OTP as used
+                    $updateStmt = $connect->prepare("UPDATE otps SET is_used = 1 WHERE id = ?");
+                    $updateStmt->bind_param("i", $alldata['id']);
+                    $updateStmt->execute();
+                }
+            
+                return $alldata;
+            }
+            
+        public static function verifyEmailAndPhone($email = "", $phone = "", $data = "*") 
+            {
+                $connect = static::getDB();
+                $alldata = [];
+
+                $data = is_string($data) ? $data : "*";
+
+                $stmt = $connect->prepare("
+                    UPDATE users 
+                    SET 
+                        is_emailverified = 1, 
+                        is_phonenumberverified = 1, 
+                        emailVerifiedAt = NOW(), 
+                        phoneNoVerifiedAt = NOW() 
+                    WHERE email = ? AND phoneNo = ?
+                ");
+                $stmt->bind_param("ss", $email, $phone);
+                $stmt->execute();
+
+                // Fetch updated user data
+                $stmt = $connect->prepare("SELECT $data FROM users WHERE email = ? AND phoneNo = ?");
+                $stmt->bind_param("ss", $email, $phone);
+                $stmt->execute();
+                $result = $stmt->get_result();
+
+                if ($result->num_rows > 0) {
+                    $alldata = $result->fetch_assoc();
+                }
+
+                return $alldata;
+            }
+
+            public static function verifyEmailAndPhoneOtp($email = "", $email_otp = "", $phone = "", $phone_otp = "") 
+            {
+                $connect = static::getDB();
+            
+                $stmt = $connect->prepare("
+                    SELECT id, receiver, type FROM otps 
+                    WHERE 
+                        ((receiver = ? AND otp = ? AND type = 'email') 
+                        OR 
+                        (receiver = ? AND otp = ? AND type = 'phone')) 
+                    AND expires_at >= NOW() AND is_used = 0
+                ");
+                $stmt->bind_param("ssss", $email, $email_otp, $phone, $phone_otp);
+                $stmt->execute();
+                $result = $stmt->get_result();
+            
+                $verifiedTypes = [];
+                $otpIds = [];
+            
+                while ($row = $result->fetch_assoc()) {
+                    $verifiedTypes[] = $row['type'];
+                    $otpIds[] = $row['id'];
+                }
+            
+                // If both email and phone were found and valid
+                if (in_array('email', $verifiedTypes) && in_array('phone', $verifiedTypes)) {
+                    // Mark both as used
+                    foreach ($otpIds as $id) {
+                        $markUsed = $connect->prepare("UPDATE otps SET is_used = 1 WHERE id = ?");
+                        $markUsed->bind_param("i", $id);
+                        $markUsed->execute();
+                    }
+                    return true;
+                }
+            
+                return false;
+            }
+    public static function getUserBankAccountByNumber($account_number)
+        {
+            $connect = static::getDB();
+            $stmt = $connect->prepare("SELECT * FROM bank_accounts WHERE account_number = ?");
+            $stmt->bind_param("s", $account_number);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            return $result->num_rows > 0 ? $result->fetch_assoc() : null;
+        }
+    
+        public static function addBankAccount($user_pubkey, $account_name, $account_number, $bank_name, $bank_code, $is_default = 0) {
+            $connect = static::getDB();
+        
+            $check = $connect->prepare("SELECT id FROM bank_accounts WHERE user_pubkey = ?");
+            $check->bind_param("s", $user_pubkey);
+            $check->execute();
+            $result = $check->get_result();
+        
+            if ($result->num_rows === 0) {
+                $is_default = 1;
+            } elseif ($is_default == 1) {
+                $reset = $connect->prepare("UPDATE bank_accounts SET is_default = 0 WHERE user_pubkey = ?");
+                $reset->bind_param("s", $user_pubkey);
+                $reset->execute();
+            }
+        
+            $insert = $connect->prepare("
+                INSERT INTO bank_accounts (user_pubkey, account_name, account_number, bank_name, bank_code, is_default)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            $insert->bind_param("sssssi", $user_pubkey, $account_name, $account_number, $bank_name, $bank_code, $is_default);
+            $insert->execute();
+        
+            return $insert->affected_rows > 0;
+        }      
+
+    public static function storeDepositIntent($user_pubkey, $amount, $payment_gateway, $reference, $status = 'pending') {
+            $connect = static::getDB();
+        
+            $query = "INSERT INTO deposits (user_pubkey, amount, payment_gateway, reference, status, created_at)
+                      VALUES (?, ?, ?, ?, ?, NOW())";
+        
+            $stmt = $connect->prepare($query);
+            $stmt->bind_param("sdsss", $user_pubkey, $amount, $payment_gateway, $reference, $status);
+            $stmt->execute();
+        
+            return $stmt->affected_rows > 0;
+        }
+        
+        public static function generatePaystackLink($email, $amount, $fullname, $reference) {
+            $amountInKobo = $amount * 100;
+            $callback_url = 'http://localhost/airtime/api/users/auth/Callback.php';
+        
+            $fields = [
+                'email' => $email,
+                'amount' => $amountInKobo,
+                'reference' => $reference,
+                'callback_url' => $callback_url
+            ];
+        
+            $fields_string = http_build_query($fields);
+        
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, "https://api.paystack.co/transaction/initialize");
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $fields_string);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                "Authorization: Bearer sk_test_83d7ddd7c5a80f9093a0f30102b58c292e6c3b18",
+                "Content-Type: application/x-www-form-urlencoded",
+                "Cache-Control: no-cache"
+            ]);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        
+            $result = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+        
+            if ($httpCode !== 200 || !$result) {
+                error_log("Paystack error: $result");
+                return null;
+            }
+        
+            $response = json_decode($result, true);
+        
+            if (isset($response['status']) && $response['status'] === true) {
+                return $response['data']['authorization_url'];
+            } else {
+                error_log("Paystack response error: " . json_encode($response));
+                return null;
+            }
+        }       
+        
+    public static function generateMonnifyLink($email, $amount, $fullname, $reference) {
+            $amount = number_format($amount, 2, '.', '');
+            $contract_code = getenv("MONNIFY_CONTRACT_CODE");
+            $api_key = getenv("MONNIFY_API_KEY");
+            $secret_key = getenv("MONNIFY_SECRET_KEY");
+            $callback_url = getenv("MONNIFY_CALLBACK_URL");
+        
+            $auth = base64_encode("$api_key:$secret_key");
+        
+            $data = [
+                "amount" => $amount,
+                "customerName" => $fullname,
+                "customerEmail" => $email,
+                "paymentReference" => $reference,
+                "paymentDescription" => "Wallet Deposit",
+                "currencyCode" => "NGN",
+                "contractCode" => $contract_code,
+                "redirectUrl" => $callback_url
+            ];
+        
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, "https://api.monnify.com/api/v1/merchant/transactions/init-transaction");
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                "Authorization: Basic $auth",
+                "Content-Type: application/json"
+            ]);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        
+            $result = curl_exec($ch);
+            curl_close($ch);
+        
+            $response = json_decode($result, true);
+            return $response['responseBody']['checkoutUrl'] ?? null;
+        }       
+        
+    public static function getDepositByReference($reference)
+        {
+            $connect = static::getDB(); 
+            $stmt = $connect->prepare("SELECT * FROM deposits WHERE reference = ?");
+            $stmt->bind_param("s", $reference); 
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            return $result->num_rows > 0 ? $result->fetch_assoc() : null;
+        }
+        
+    public static function updateDepositStatus($reference, $status)
+        {
+            $connect = static::getDB(); 
+            $stmt = $connect->prepare("UPDATE deposits SET status = ? WHERE reference = ?");
+            $stmt->bind_param("ss", $status, $reference); 
+            $stmt->execute();
+            
+            return $stmt->affected_rows > 0;
+        }
+        
 }    

@@ -22,13 +22,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
         exit;
     }
 
-    // Return the user's details as JSON
-    echo json_encode([
-        'status' => true,
-        'message' => 'User data retrieved successfully.',
-        'data' => $user_data
-    ]);
-    exit;
+    $maindata = $user_data;
+    $text = $api_response_class_call::$detailsFetched;
+    $api_status_code_class_call->respondOK($maindata, $text);
 
 } else {
     $text = $api_response_class_call::$methodUsedNotAllowed;

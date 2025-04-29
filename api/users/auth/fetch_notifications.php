@@ -5,24 +5,16 @@ use Config\Utility_Functions;
 require_once '../../../config/bootstrap_file.php';
 
 if ($_SERVER['REQUEST_METHOD'] == 'GET') {
-    $data = json_decode(file_get_contents('php://input'));
+    $decodedToken = $api_status_code_class_call->ValidateAPITokenSentIN();
+    $user_pubkey = $decodedToken->usertoken;
+    
+    $user_id = $api_users_table_class_call::checkIfIsUser($user_pubkey);
 
-    $userid = ""; // Replace with the actual user ID (retrieve from authentication)
-    if (isset($data->userid)) {
-        $userid = $utility_class_call::escape($data->userid);
-    }
-    // Fetch unread notifications for the user
-    $unreadNotifications = Utility_Functions::getUnreadNotifications($userid);
+    $notifications = $utility_class_call::getUserNotifications($user_pubkey);
 
-    // Mark fetched notifications as read
-    Utility_Functions::markNotificationsAsRead($unreadNotifications);
-
-    $response = [
-        'status' => 'success',
-        'data' => $unreadNotifications,
-    ];
-
-    echo json_encode($response);
+    $maindata = $notifications;
+    $text = $api_response_class_call::$fetchNotification;
+    $api_status_code_class_call->respondOK($maindata, $text);
 } else {
     $text = $api_response_class_call::$methodUsedNotAllowed;
     $errorcode = $api_error_code_class_call::$internalHackerWarning;

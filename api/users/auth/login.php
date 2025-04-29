@@ -47,6 +47,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $linktosolve = "https://";
         $api_status_code_class_call->respondBadRequest($maindata,$text,$hint,$linktosolve,$errorcode);
     }
+    if (!$user['is_emailverified'] == 1) {
+        $text = "Email has not been verified.";
+        $errorcode = $api_error_code_class_call::$internalUserWarning;
+        $hint = ["Email has not been verified."];
+        $linktosolve = "https://";
+        $api_status_code_class_call->respondBadRequest([], $text, $hint, $linktosolve, $errorcode);
+        exit;
+    }
   $userPubkey = $user["pub_key"];
     $userid=$user["user_id"];
     // $seescode="ewdfwf";
