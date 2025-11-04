@@ -6,22 +6,7 @@ require_once '../../../config/bootstrap_file.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    // Validate user token
-    $decodedToken = $api_status_code_class_call->ValidateAPITokenSentIN();
-    $user_pubkey = $decodedToken->usertoken;
-
     // Get user data from token
-    $user = $api_users_table_class_call::checkIfIsUser($user_pubkey);
-
-    if (!$user) {
-        $text = $api_response_class_call::$unauthorized_token;
-        $errorcode = $api_error_code_class_call::$internalHackerWarning;
-        $hint = ["Please log in to continue."];
-        $linktosolve = "https://";
-        $api_status_code_class_call->respondUnauthorized([], $text, $hint, $linktosolve, $errorcode);
-        exit;
-    }
-
     $data = json_decode(file_get_contents("php://input"));
     $phone = $utility_class_call::inputData($data, 'phone');
 

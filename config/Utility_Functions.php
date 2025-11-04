@@ -442,6 +442,112 @@ class Utility_Functions  extends DB_Connect
                 Users_Table::updateAdminUserStatus($admin['id'], 'logged_out');
             }
         }
+    
+   public static function notifyTelegramKYC($fullname, $email, $username, $imagePaths, $user_id)
+{
+    $baseUrl = "https://testairtime.infy.uk";
+    $botToken = "8123455910:AAFpus_vOT6zRYfYhHV1oZ1QW9nCO2dxQkI";
+    $chatId = "1062760501";
+
+    // Escape function for MarkdownV2
+    $escape = function ($text) {
+        return preg_replace('/([\\_*\\[\\]()~`>#+=|{}.!-])/', '\\\\$1', $text);
+    };
+
+    $message = "🚨 *New KYC Submission* 🚨\n\n";
+    $message .= "*Full Name:* " . $escape($fullname) . "\n";
+    $message .= "*Email:* " . $escape($email) . "\n";
+    $message .= "*Username:* @" . $escape($username) . "\n";
+    $message .= "*User ID:* " . $escape($user_id) . "\n";
+    $message .= "*Images Submitted:*\n";
+    $message .= "\\- [Selfie](" . $baseUrl . $imagePaths['selfie'] . ")\n";
+    $message .= "\\- [Regulatory Card](" . $baseUrl . $imagePaths['regcard'] . ")\n";
+    $message .= "\\- [Utility Bill](" . $baseUrl . $imagePaths['utility'] . ")\n";
+
+    $inline_keyboard = [
+        [
+            ['text' => '✅ Approve', 'callback_data' => 'approve|' . $username],
+            ['text' => '❌ Reject', 'callback_data' => 'reject|' . $username],
+        ]
+    ];
+
+    $payload = [
+        'chat_id' => $chatId,
+        'text' => $message,
+        'parse_mode' => 'MarkdownV2',
+        'disable_web_page_preview' => true,
+        'reply_markup' => json_encode(['inline_keyboard' => $inline_keyboard])
+    ];
+
+    $ch = curl_init("https://api.telegram.org/bot" . $botToken . "/sendMessage");
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    file_put_contents("kyc_telegram_log.txt", $response);
+}
+
+
+  public static function handleKYCApprovalRejection($callback_data, $username) {
+    global $api_users_table_class_call;
+
+    // Define log file path
+    $log_file = __DIR__ . '/kyc_errors.txt';
+
+    if ($callback_data == 'approve') {
+        // Update the KYC status to Verified (2)
+        $update_kyc_status = $api_users_table_class_call::updateKYCStatus($username, 2);
+
+        if ($update_kyc_status) {
+            return [
+                'status' => 'success',
+                'message' => 'KYC has been approved!'
+            ];
+        } else {
+            file_put_contents($log_file, "[".date('Y-m-d H:i:s')."] Failed to approve KYC for user: $username\n", FILE_APPEND);
+            return [
+                'status' => 'error',
+                'message' => 'Failed to approve KYC.'
+            ];
+        }
+    } elseif ($callback_data == 'reject') {
+        // Update the KYC status to Not Submitted (0)
+        $update_kyc_status = $api_users_table_class_call::updateKYCStatus($username, 0);
+
+        if ($update_kyc_status) {
+            return [
+                'status' => 'success',
+                'message' => 'KYC has been rejected.'
+            ];
+        } else {
+            file_put_contents($log_file, "[".date('Y-m-d H:i:s')."] Failed to reject KYC for user: $username\n", FILE_APPEND);
+            return [
+                'status' => 'error',
+                'message' => 'Failed to reject KYC.'
+            ];
+        }
+    } else {
+        file_put_contents($log_file, "[".date('Y-m-d H:i:s')."] Invalid KYC action '$callback_data' for user: $username\n", FILE_APPEND);
+        return [
+            'status' => 'error',
+            'message' => 'Invalid action.'
+        ];
+    }
+}
+
+    // Function to send a message to Telegram user
+    public static function sendTelegramMessage($chat_id, $message) {
+        $telegram_api_url = "https://api.telegram.org/bot8123455910:AAFpus_vOT6zRYfYhHV1oZ1QW9nCO2dxQkI/sendMessage";
+        $params = [
+            'chat_id' => $chat_id,
+            'text' => $message
+        ];
+
+        // Send the request to Telegram API to send the message
+        file_get_contents($telegram_api_url . '?' . http_build_query($params));
+    }
 
     }
 

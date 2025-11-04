@@ -786,5 +786,54 @@ class Users_Table extends Config\DB_Connect
             
             return $stmt->affected_rows > 0;
         }
-        
+
+   public static function submitKYC($username, $imagePaths)
+{
+    $conn = static::getDB();
+
+    $stmt = $conn->prepare("
+        UPDATE users 
+        SET 
+            user_selfie = ?, 
+            user_regulatory_card = ?, 
+            user_utility_bill = ?, 
+            user_kyc_status = '1'
+        WHERE username = ?
+    ");
+
+    if (!$stmt) {
+        return false;
+    }
+
+    $stmt->bind_param(
+        "ssss",
+        $imagePaths['selfie'],
+        $imagePaths['regcard'],
+        $imagePaths['utility'],
+        $username
+    );
+
+    return $stmt->execute();
+}
+
+    
+        public static function updateKYCStatus($username, $status)
+        {
+            $conn = static::getDB();
+
+            $stmt = $conn->prepare("
+                UPDATE users 
+                SET user_kyc_status = ? 
+                WHERE username = ?
+            ");
+
+            if (!$stmt) {
+                return false;
+            }
+
+            $stmt->bind_param("is", $status, $username);
+
+            return $stmt->execute();
+        }
+
 }    

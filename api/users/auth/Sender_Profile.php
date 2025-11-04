@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $text = 'Sender Profile could not be created';
         $errorcode = $api_error_code_class_call::$internalServerError;
         $maindata = [];
-        $hint = ["Registration failed. Please try again later."];
+        $hint = ["Registration of Sender Profile failed. Please try again later."];
         $linktosolve = "https://";
         $api_status_code_class_call->respondInternalServerError($maindata, $text, $hint, $linktosolve, $errorcode);
     }
