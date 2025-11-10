@@ -72,6 +72,8 @@ class API_User_Response
     public  static $forgotMailSent="Recovery Mail sent successfully, kindly check your mail";
     public  static $errorOccured="An Error occured, Please contact support";
 
+    public static $phoneExists="Phone Number Already exists";
+
 
     
 }

@@ -788,33 +788,33 @@ class Users_Table extends Config\DB_Connect
         }
 
    public static function submitKYC($username, $imagePaths)
-{
-    $conn = static::getDB();
+    {
+        $conn = static::getDB();
 
-    $stmt = $conn->prepare("
-        UPDATE users 
-        SET 
-            user_selfie = ?, 
-            user_regulatory_card = ?, 
-            user_utility_bill = ?, 
-            user_kyc_status = '1'
-        WHERE username = ?
-    ");
+        $stmt = $conn->prepare("
+            UPDATE users 
+            SET 
+                user_selfie = ?, 
+                user_regulatory_card = ?, 
+                user_utility_bill = ?, 
+                user_kyc_status = '1'
+            WHERE username = ?
+        ");
 
-    if (!$stmt) {
-        return false;
+        if (!$stmt) {
+            return false;
+        }
+
+        $stmt->bind_param(
+            "ssss",
+            $imagePaths['selfie'],
+            $imagePaths['regcard'],
+            $imagePaths['utility'],
+            $username
+        );
+
+        return $stmt->execute();
     }
-
-    $stmt->bind_param(
-        "ssss",
-        $imagePaths['selfie'],
-        $imagePaths['regcard'],
-        $imagePaths['utility'],
-        $username
-    );
-
-    return $stmt->execute();
-}
 
     
         public static function updateKYCStatus($username, $status)
@@ -834,6 +834,22 @@ class Users_Table extends Config\DB_Connect
             $stmt->bind_param("is", $status, $username);
 
             return $stmt->execute();
+        }
+
+        public static function getUserLevel($user_id)
+        {
+            $connect = static::getDB();
+            $stmt = $connect->prepare("SELECT user_level FROM users WHERE id = ?");
+            $stmt->bind_param("i", $user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+
+            if ($result->num_rows > 0) {
+                $row = $result->fetch_assoc();
+                return (int)$row['user_level'];
+            }
+
+            return null; // user not found
         }
 
 }    

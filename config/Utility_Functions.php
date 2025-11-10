@@ -435,13 +435,13 @@ class Utility_Functions  extends DB_Connect
         return $stmt->execute();
     }
 
-    public static function adminLogout($userPubkey) {
+    // public static function adminLogout($userPubkey) {
         
-            $admin = Users_Table::getAdminUserByKey($userPubkey);
-            if ($admin) {
-                Users_Table::updateAdminUserStatus($admin['id'], 'logged_out');
-            }
-        }
+    //         $admin = Users_Table::getAdminUserByKey($userPubkey);
+    //         if ($admin) {
+    //             Users_Table::updateAdminUserStatus($admin['id'], 'logged_out');
+    //         }
+    //     }
     
    public static function notifyTelegramKYC($fullname, $email, $username, $imagePaths, $user_id)
 {
@@ -549,7 +549,64 @@ class Utility_Functions  extends DB_Connect
         file_get_contents($telegram_api_url . '?' . http_build_query($params));
     }
 
+    // Validate uploaded image
+    public static function validateImageUpload($file, $label)
+    {
+        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+            return [
+                'success' => false,
+                'message' => "{$label} not uploaded correctly."
+            ];
+        }
+
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+        $maxSize = 5 * 1024 * 1024; // 5 MB
+
+        if (!in_array($file['type'], $allowedTypes)) {
+            return [
+                'success' => false,
+                'message' => "{$label} must be a JPG or PNG image."
+            ];
+        }
+
+        if ($file['size'] > $maxSize) {
+            return [
+                'success' => false,
+                'message' => "{$label} must not exceed 5MB."
+            ];
+        }
+
+        return ['success' => true];
     }
 
+    // Upload image and return saved path
+    public static function uploadImage($file, $directory, $username)
+    {
+        // Define upload directory
+        $uploadDir = $_SERVER['DOCUMENT_ROOT'] . '/uploads' . $directory;
+
+        // Create directory if it doesn't exist
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
+
+        $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+        $filename = $username . '_' . time() . '.' . $extension;
+        $filePath = $uploadDir . $filename;
+
+        if (move_uploaded_file($file['tmp_name'], $filePath)) {
+            return [
+                'success' => true,
+                'imagepath' => '/uploads' . $directory . $filename
+            ];
+        }
+
+        return [
+            'success' => false,
+            'message' => "Failed to upload {$file['name']}"
+        ];
+    }
+
+}
 
     ?>

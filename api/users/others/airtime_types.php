@@ -1,4 +1,14 @@
 <?php
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+
+// If the browser sends a preflight OPTIONS request, stop here and return OK
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
 header('Content-Type: application/json');
 
 use Config\Utility_Functions;
@@ -34,13 +44,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
 
         if (!$maindata) {
-            $api_status_code_class_call->respondInternalServerError("Failed to fetch data from the third-party API.");
+            $text = "Failed to fetch data from the third-party API.";
+            $errorcode = $api_error_code_class_call::$internalServerError;
+            $maindata = [];
+            $hint = ["Check the third-party API connection and try again."];
+            $linktosolve = "https://";
+            $api_status_code_class_call->respondInternalServerError($maindata, $text, $hint, $linktosolve, $errorcode);
             exit;
         }
 
         $api_status_code_class_call->respondOK($maindata, "Data fetched successfully.");
     } catch (\Exception $e) {
-        $api_status_code_class_call->respondInternalServerError("An error occurred: " . $e->getMessage());
+        $maindata = [];
+        $text = "An error occurred: " . $e->getMessage();
+        $errorcode = $api_error_code_class_call::$internalServerError;
+        $hint = ["Check server logs and try again."];
+        $linktosolve = "https://";
+        $api_status_code_class_call->respondInternalServerError($maindata, $text, $hint, $linktosolve, $errorcode);
     }
 } else {
     $text = $api_response_class_call::$methodUsedNotAllowed;
