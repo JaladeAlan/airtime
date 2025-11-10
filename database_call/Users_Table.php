@@ -765,7 +765,38 @@ class Users_Table extends Config\DB_Connect
             $response = json_decode($result, true);
             return $response['responseBody']['checkoutUrl'] ?? null;
         }       
-        
+
+    public static function getAllBanks($country = "") {
+        $url = "https://api.paystack.co/bank?country=" . $country;
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "Authorization: Bearer sk_test_83d7ddd7c5a80f9093a0f30102b58c292e6c3b18", 
+            "Content-Type: application/json",
+            "Cache-Control: no-cache"
+        ]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+        $result = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || !$result) {
+            error_log("Paystack get banks error: $result");
+            return null;
+        }
+
+        $response = json_decode($result, true);
+
+        if (isset($response['status']) && $response['status'] === true) {
+            return $response['data']; 
+        } else {
+            error_log("Paystack response error: " . json_encode($response));
+            return null;
+        }
+    }
+
     public static function getDepositByReference($reference)
         {
             $connect = static::getDB(); 
