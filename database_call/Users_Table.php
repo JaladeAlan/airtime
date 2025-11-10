@@ -458,7 +458,7 @@ class Users_Table extends Config\DB_Connect
                 $connect = static::getDB();
             
                 // Prepare the SQL statement for fetching the reset code and expiration time
-                $getResetCode = $connect->prepare("SELECT passwordResetCode FROM users WHERE email = ?");
+                $getResetCode = $connect->prepare("SELECT passwordResetCode AS reset_code FROM users WHERE email = ?");
             
                 // Bind the email parameter
                 $getResetCode->bind_param("s", $email);
@@ -532,7 +532,7 @@ class Users_Table extends Config\DB_Connect
                 $connect = static::getDB();
             
                 $query = "
-                    REPLACE INTO otps (receiver, otp, type, created_at, expires_at, is_used)
+                    REPLACE INTO otps (receiver, otp, type, created_node -vat, expires_at, is_used)
                     VALUES (?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL ? MINUTE), 0)
                 ";
                 $stmt = $connect->prepare($query);

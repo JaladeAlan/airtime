@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Verify the provided reset code against the stored reset code
     $storedResetCode = $api_users_table_class_call::getStoredResetCode($email);
 
-    if ($resetCode !== $storedResetCode) {
+    if ((string)$resetCode !== (string)$storedResetCode) {
         // Return an error response if the reset code does not match
         $text = $api_response_class_call::$invalidResetData;
         $errorcode = $api_error_code_class_call::$internalUserWarning;
