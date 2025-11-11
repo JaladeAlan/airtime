@@ -15,58 +15,37 @@ header('Content-Type: application/json');
 use Config\Utility_Functions;
 require_once '../../../config/bootstrap_file.php';
 
-// --- MAIN LOGIC ---
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    try {
-        // ✅ Validate API Token
-        $decodedToken = $api_status_code_class_call->ValidateAPITokenSentIN();
-        $user_pubkey = $decodedToken->usertoken ?? null;
-
-        if ($utility_class_call::validate_input($user_pubkey)) {
-            $text = $api_response_class_call::$unauthorized_token;
-            $errorcode = $api_error_code_class_call::$internalHackerWarning;
-            $hint = ["Invalid or missing API token."];
-            $linktosolve = "https://";
-            $api_status_code_class_call->respondUnauthorized([], $text, $hint, $linktosolve, $errorcode);
-            exit;
-        }
-
-        // ✅ Fetch user record
-        $user_data = $api_users_table_class_call::checkIfIsUser($user_pubkey);
-
-        // ❌ If no user found
-        if (!$user_data) {
-            $text = $api_response_class_call::$unauthorized_token;
-            $errorcode = $api_error_code_class_call::$internalHackerWarning;
-            $hint = ["User not found or token invalid.", "Please log in again."];
-            $linktosolve = "https://";
-            $api_status_code_class_call->respondUnauthorized([], $text, $hint, $linktosolve, $errorcode);
-            exit;
-        }
-
-        // ✅ Remove sensitive info (optional)
-        unset($user_data['password'], $user_data['pin'], $user_data['secret_key']);
-
-        // ✅ Send successful response
-        $maindata = $user_data;
-        $text = $api_response_class_call::$detailsFetched;
-        $api_status_code_class_call->respondOK($maindata, $text);
-
-    } catch (\Exception $e) {
-        // ❌ Handle unexpected exceptions
-        $errorcode = $api_error_code_class_call::$internalServerError;
-        $text = "An error occurred while fetching user details.";
-        $hint = ["Please try again later.", $e->getMessage()];
+try {
+    if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+        $text = $api_response_class_call::$methodUsedNotAllowed;
+        $errorcode = $api_error_code_class_call::$internalHackerWarning;
+        $hint = ["Use GET to fetch user details."];
         $linktosolve = "https://";
-        $api_status_code_class_call->respondInternalServerError([], $text, $hint, $linktosolve, $errorcode);
+        $api_status_code_class_call->respondMethodNotAllowed([], $text, $hint, $linktosolve, $errorcode);
+        exit;
     }
 
-} else {
-    // ❌ Wrong HTTP method
-    $text = $api_response_class_call::$methodUsedNotAllowed;
-    $errorcode = $api_error_code_class_call::$internalHackerWarning;
-    $hint = ["Ensure to use the GET method for fetching user details."];
-    $linktosolve = "https://";
-    $api_status_code_class_call->respondMethodNotAllowed([], $text, $hint, $linktosolve, $errorcode);
+    $decodedToken = $api_status_code_class_call->ValidateAPITokenSentIN();
+    $user_pubkey = $decodedToken->usertoken ?? null;
+
+    $user_data = $api_users_table_class_call::checkIfIsUser($user_pubkey);
+
+    if (!$user_data) {
+        $text = "User not found";
+        $text = $api_response_class_call::$unauthorized_token;
+        $hint = ["Token may have expired or been tampered with."];
+        $api_status_code_class_call->respondUnauthorized([], $text, $hint, "https://", $errorcode);
+        exit;
+    }
+
+    $dashboard_data = $api_users_table_class_call::getUserDashboardData($user_pubkey);
+    $response = ["dashboard" => $dashboard_data];
+    $text = $api_response_class_call::$detailsFetched;
+    $api_status_code_class_call->respondOK($response, $text);
+
+} catch (\Throwable $e) {
+    $errorcode = $api_error_code_class_call::$internalServerError;
+    $text = "An error occurred while fetching user profile.";
+    $hint = [$e->getMessage()];
+    $api_status_code_class_call->respondInternalServerError([], $text, $hint, "https://", $errorcode);
 }
-?>

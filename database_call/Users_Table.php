@@ -137,6 +137,115 @@ class Users_Table extends Config\DB_Connect
             }
         }
 
+        public static function depositToWallet($user_pubkey, $amount, $details = "Wallet Deposit", $reference = null)
+        {
+            $connect = static::getDB();
+
+            // Generate reference if not provided
+            if (!$reference) {
+                $reference = 'DEP-' . strtoupper(uniqid());
+            }
+
+            $connect->begin_transaction();
+
+            try {
+                // Update user balance
+                $updateBalance = $connect->prepare("UPDATE users SET userBalance = userBalance + ? WHERE pub_key = ?");
+                $updateBalance->bind_param("ds", $amount, $user_pubkey);
+                $updateBalance->execute();
+
+                // Insert transaction record
+                $insertTransaction = $connect->prepare("
+                    INSERT INTO transactions 
+                    (user_pubkey, transaction_Status, transaction_amount, transaction_details, transaction_reference, transaction_type)
+                    VALUES (?, 'successful', ?, ?, ?, 'wallet_topup')
+                ");
+                $insertTransaction->bind_param("sdss", $user_pubkey, $amount, $details, $reference);
+                $insertTransaction->execute();
+
+                $connect->commit();
+
+                return [
+                    "status" => true,
+                    "message" => "Deposit successful",
+                    "reference" => $reference
+                ];
+            } catch (\Exception $e) {
+                $connect->rollback();
+                return [
+                    "status" => false,
+                    "message" => "Deposit failed: " . $e->getMessage()
+                ];
+            }
+        }
+
+        public static function withdrawFromWallet($user_pubkey, $amount, $details = "Wallet Withdrawal", $reference = null)
+        {
+            $connect = static::getDB();
+
+            // Generate reference if not provided
+            if (!$reference) {
+                $reference = 'WDR-' . strtoupper(uniqid());
+            }
+
+            // Check user balance
+            $user = self::getUserByKey($user_pubkey, "userBalance");
+            if (!$user || $user["userBalance"] < $amount) {
+                return [
+                    "status" => false,
+                    "message" => "Insufficient balance"
+                ];
+            }
+
+            // Start transaction
+            $connect->begin_transaction();
+
+            try {
+                // Update user balance
+                $updateBalance = $connect->prepare("UPDATE users SET userBalance = userBalance - ? WHERE pub_key = ?");
+                $updateBalance->bind_param("ds", $amount, $user_pubkey);
+                $updateBalance->execute();
+
+                // Insert transaction record
+                $insertTransaction = $connect->prepare("
+                    INSERT INTO transactions 
+                    (user_pubkey, transaction_Status, transaction_amount, transaction_details, transaction_reference, transaction_type)
+                    VALUES (?, 'successful', ?, ?, ?, 'withdrawal')
+                ");
+                $insertTransaction->bind_param("sdss", $user_pubkey, $amount, $details, $reference);
+                $insertTransaction->execute();
+
+                $connect->commit();
+
+                return [
+                    "status" => true,
+                    "message" => "Withdrawal successful",
+                    "reference" => $reference
+                ];
+            } catch (\Exception $e) {
+                $connect->rollback();
+                return [
+                    "status" => false,
+                    "message" => "Withdrawal failed: " . $e->getMessage()
+                ];
+            }
+        }
+
+        public static function storeWithdrawalRequest($user_pubkey, $amount, $payment_gateway, $account_details, $reference, $status = 'pending') 
+        {
+        $connect = static::getDB();
+
+        $query = "INSERT INTO withdrawals (user_pubkey, amount, payment_gateway, account_details, reference, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, NOW())";
+
+        $stmt = $connect->prepare($query);
+        $stmt->bind_param("sdssss", $user_pubkey, $amount, $payment_gateway, $account_details, $reference, $status);
+        $stmt->execute();
+
+        return $stmt->affected_rows > 0;
+    }
+
+
         public static function getUserByUsername($username= "",$data="*")
         {
             //input type checks if its from post request or just normal function call
@@ -688,7 +797,7 @@ class Users_Table extends Config\DB_Connect
         
         public static function generatePaystackLink($email, $amount, $fullname, $reference) {
             $amountInKobo = $amount * 100;
-            $callback_url = 'http://localhost/airtime/api/users/auth/Callback.php';
+            $callback_url = 'https://2542411817eb.ngrok-free.app/airtime/api/users/auth/payment-success.php';
         
             $fields = [
                 'email' => $email,
@@ -854,7 +963,7 @@ class Users_Table extends Config\DB_Connect
 
             $stmt = $conn->prepare("
                 UPDATE users 
-                SET user_kyc_status = ? 
+                SET user_kyc_status = ?, userLevel = '2'
                 WHERE username = ?
             ");
 
@@ -870,17 +979,174 @@ class Users_Table extends Config\DB_Connect
         public static function getUserLevel($user_id)
         {
             $connect = static::getDB();
-            $stmt = $connect->prepare("SELECT user_level FROM users WHERE id = ?");
+            $stmt = $connect->prepare("SELECT userLevel FROM users WHERE id = ?");
             $stmt->bind_param("i", $user_id);
             $stmt->execute();
             $result = $stmt->get_result();
 
             if ($result->num_rows > 0) {
                 $row = $result->fetch_assoc();
-                return (int)$row['user_level'];
+                return (int)$row['userLevel'];
             }
 
-            return null; // user not found
+            return null; 
         }
+        
+        public static function userLevelLimits($level)
+        {
+            if ($level === 2) {
+                return [
+                    "daily_transaction_limit" => "Unlimited",
+                    "max_wallet_balance" => "Unlimited"
+                ];
+            } else {
+                return [
+                    "daily_transaction_limit" => 20000,
+                    "max_wallet_balance" => 100000
+                ];
+            }
+        }
+
+    public static function getUserDashboardData($user_pubkey)
+    {
+        $connect = static::getDB();
+
+        // --- Fetch User Info ---
+        $userQuery = $connect->prepare("
+            SELECT 
+                first_Name AS first_name,
+                last_Name AS last_name,
+                username,
+                email,
+                phoneNo AS phone_no,
+                userBalance AS balance,
+                userLevel AS user_level,
+                user_kyc_status
+            FROM users
+            WHERE pub_key = ?
+            LIMIT 1
+        ");
+        $userQuery->bind_param("s", $user_pubkey);
+        $userQuery->execute();
+        $userResult = $userQuery->get_result();
+
+        if ($userResult->num_rows === 0) {
+            return ["status" => false, "message" => "User not found"];
+        }
+
+        $user = $userResult->fetch_assoc();
+
+        // --- Determine Level & Limits ---
+        $level = $user["user_level"] ?: "1";
+        if ($level === "2") {
+            $dailyLimit = "Unlimited";
+            $maxBalance = "Unlimited";
+        } else {
+            $dailyLimit = 20000;
+            $maxBalance = 100000;
+        }
+
+        // Auto-Upgrade to Level 2 if KYC verified ---
+        if ($user['user_kyc_status'] == '2' && $level === '1') {
+            $updateLevel = $connect->prepare("UPDATE users SET userLevel = '2' WHERE pub_key = ?");
+            $updateLevel->bind_param("s", $user_pubkey);
+            $updateLevel->execute();
+            $level = "2";
+            $dailyLimit = "Unlimited";
+            $maxBalance = "Unlimited";
+        }
+
+        // --- Fetch Total Transactions Count ---
+        $countQuery = $connect->prepare("
+            SELECT COUNT(*) AS total_transactions 
+            FROM transactions 
+            WHERE user_pubkey = ?
+        ");
+        $countQuery->bind_param("s", $user_pubkey);
+        $countQuery->execute();
+        $countResult = $countQuery->get_result()->fetch_assoc();
+
+        // --- Fetch Total Transaction Amount for Today (Daily Usage) ---
+        $today = date('Y-m-d');
+        $dailyQuery = $connect->prepare("
+            SELECT 
+                IFNULL(SUM(transaction_amount), 0) AS daily_total
+            FROM transactions 
+            WHERE user_pubkey = ?
+            AND DATE(created_at) = ?
+            AND transaction_status = 'successful'
+            AND transaction_type IN ('airtime_to_cash', 'airtime', 'bulk_airtime')
+        ");
+        $dailyQuery->bind_param("ss", $user_pubkey, $today);
+        $dailyQuery->execute();
+        $dailyTotal = $dailyQuery->get_result()->fetch_assoc()["daily_total"];
+
+        // --- Fetch Recent Transactions (limit 5) ---
+        $recentQuery = $connect->prepare("
+            SELECT 
+                id,
+                transaction_type,
+                transaction_amount,
+                transaction_status,
+                transaction_details,
+                created_at
+            FROM transactions 
+            WHERE user_pubkey = ?
+            ORDER BY created_at DESC
+            LIMIT 5
+        ");
+        $recentQuery->bind_param("s", $user_pubkey);
+        $recentQuery->execute();
+        $recentTransactions = $recentQuery->get_result()->fetch_all(MYSQLI_ASSOC);
+
+        // --- Fetch Notifications (limit 5) ---
+        $notifQuery = $connect->prepare("
+            SELECT 
+                id,
+                title,
+                message,
+                is_read,
+                created_at
+            FROM notifications 
+            WHERE user_pubkey = ?
+            ORDER BY created_at DESC
+            LIMIT 5
+        ");
+        $notifQuery->bind_param("s", $user_pubkey);
+        $notifQuery->execute();
+        $notifications = $notifQuery->get_result()->fetch_all(MYSQLI_ASSOC);
+
+        return [
+            "status" => true,
+            "message" => "Dashboard data fetched successfully",
+            "data" => [
+                "user" => [
+                    "first_name" => $user["first_name"],
+                    "last_name" => $user["last_name"],
+                    "username" => $user["username"],
+                    "email" => $user["email"],
+                    "phone_no" => $user["phone_no"],
+                    "user_level" => "Level " . $level,
+                    "kyc_status" => $user["user_kyc_status"]
+                ],
+                "wallet" => [
+                    "balance" => $user["balance"],
+                    "currency" => "NGN",
+                    "limits" => [
+                        "daily_transaction_limit" => $dailyLimit,
+                        "max_wallet_balance" => $maxBalance,
+                        "used_today" => $dailyTotal
+                    ],
+                    "upgrade_available" => ($level === "1")
+                ],
+                "transactions_summary" => [
+                    "total_transactions" => $countResult["total_transactions"]
+                ],
+                "recent_transactions" => $recentTransactions,
+                "notifications" => $notifications
+            ]
+        ];
+    }
+
 
 }    

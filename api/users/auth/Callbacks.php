@@ -1,9 +1,8 @@
 <?php
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Paystack-Signature, X-Requested-With");
 
-// If the browser sends a preflight OPTIONS request, stop here and return OK
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
@@ -13,59 +12,78 @@ header('Content-Type: application/json');
 
 require_once '../../../config/bootstrap_file.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $payload = json_decode(file_get_contents("php://input"), true);
+// Paystack secret key for webhook verification
+$paystack_secret = 'sk_test_83d7ddd7c5a80f9093a0f30102b58c292e6c3b18'; // keep secret
 
-    if (!isset($payload['data']['reference']) || !isset($payload['data']['status'])) {
-        $text = "Invalid payload.";
-        $errorcode = $api_error_code_class_call::$internalUserWarning;
-        $hint = ["Missing reference or status."];
-        $linktosolve = "https://";
-        $api_status_code_class_call->respondBadRequest([], $text, $hint, $linktosolve, $errorcode);
-        exit;
-    }
+// Get the signature from headers
+$headers = getallheaders();
+if (!isset($headers['X-Paystack-Signature'])) {
+    http_response_code(400);
+    echo json_encode(['error' => 'No signature provided.']);
+    exit;
+}
 
-    $reference = $payload['data']['reference'];
-    $status = $payload['data']['status'];
+$signature = $headers['X-Paystack-Signature'];
 
-    $deposit = $api_users_table_class_call::getDepositByReference($reference);
+// Get the request body
+$payload = @file_get_contents('php://input');
 
-    if (!$deposit) {
-        $text = "Deposit not found for this reference.";
-        $errorcode = $api_error_code_class_call::$internalServerError;
-        $hint = ["Check the reference or ensure it's stored."];
-        $linktosolve = "https://";
-        $api_status_code_class_call->respondInternalServerError([], $text, $hint, $linktosolve, $errorcode);
-        exit;
-    }
+// Verify signature
+$hash = hash_hmac('sha512', $payload, $paystack_secret);
+if ($hash !== $signature) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Invalid signature.']);
+    exit;
+}
 
-    if ($status === 'success') {
-        $updated = $api_users_table_class_call::updateDepositStatus($reference, 'completed');
+// Parse payload
+$data = json_decode($payload, true);
 
-        if ($updated) {
-            $text = "Deposit confirmed successfully.";
-            $api_status_code_class_call->respondOK([], $text);
+if (!isset($data['data']['reference']) || !isset($data['data']['status'])) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Invalid payload.']);
+    exit;
+}
+
+$reference = $data['data']['reference'];
+$status = $data['data']['status'];
+
+// Fetch deposit
+$deposit = $api_users_table_class_call::getDepositByReference($reference);
+if (!$deposit) {
+    http_response_code(404);
+    echo json_encode(['error' => 'Deposit not found.']);
+    exit;
+}
+
+// Idempotency: do not process completed deposits
+if ($deposit['status'] === 'completed') {
+    http_response_code(200);
+    echo json_encode(['message' => 'Deposit already processed.']);
+    exit;
+}
+
+if ($status === 'success') {
+    // Update deposit status first
+    $updated = $api_users_table_class_call::updateDepositStatus($reference, 'completed');
+    if ($updated) {
+        // Credit user wallet
+        $walletResult = $api_users_table_class_call::depositToWallet($deposit['user_pubkey'], $deposit['amount'], 'Wallet top-up via Paystack', $reference);
+        
+        if ($walletResult['status']) {
+            http_response_code(200);
+            echo json_encode(['message' => 'Deposit confirmed and wallet credited.']);
         } else {
-            $text = "Deposit found, but update failed.";
-            $errorcode = $api_error_code_class_call::$internalServerError;
-            $hint = ["Check your database update logic."];
-            $linktosolve = "https://";
-            $api_status_code_class_call->respondInternalServerError([], $text, $hint, $linktosolve, $errorcode);
+            http_response_code(500);
+            echo json_encode(['error' => 'Deposit updated but wallet credit failed.', 'details' => $walletResult['message']]);
         }
     } else {
-        // Payment was not successful
-        $api_users_table_class_call::updateDepositStatus($reference, 'failed');
-
-        $text = "Payment failed or was abandoned.";
-        $errorcode = $api_error_code_class_call::$internalUserWarning;
-        $hint = ["Try another payment method or retry."];
-        $linktosolve = "https://";
-        $api_status_code_class_call->respondBadRequest([], $text, $hint, $linktosolve, $errorcode);
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to update deposit status.']);
     }
 } else {
-    $text = "Invalid request method.";
-    $errorcode = $api_error_code_class_call::$internalHackerWarning;
-    $hint = ["Use POST method for Paystack callbacks."];
-    $linktosolve = "https://";
-    $api_status_code_class_call->respondMethodNotAllowed([], $text, $hint, $linktosolve, $errorcode);
+    // Payment failed
+    $api_users_table_class_call::updateDepositStatus($reference, 'failed');
+    http_response_code(400);
+    echo json_encode(['error' => 'Payment failed or abandoned.']);
 }

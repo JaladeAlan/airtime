@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Record Transaction
         $details = "{$amount} airtime converted successfully.";
-        $type = "airtime-to-cash";
+        $type = "airtime_to_cash";
         $api_users_table_class_call::insertTransaction($user_pubkey, $amount, $details, $reference, $type);
 
         // Send Success Response

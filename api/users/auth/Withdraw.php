@@ -3,6 +3,7 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 
+// Handle preflight OPTIONS request
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
@@ -28,21 +29,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $data = json_decode(file_get_contents("php://input"));
+
     $amount = $utility_class_call::inputData($data, 'amount');
     $payment_method = $utility_class_call::inputData($data, 'payment_method');
+    $account_details = $utility_class_call::inputData($data, 'account_details'); // e.g., bank info
 
-    if ($utility_class_call::validate_input($amount) || $utility_class_call::validate_input($payment_method)) {
+    if ($utility_class_call::validate_input($amount) || 
+        $utility_class_call::validate_input($payment_method) || 
+        $utility_class_call::validate_input($account_details)) {
+
         $text = $api_response_class_call::$invalidInfo;
         $errorcode = $api_error_code_class_call::$internalUserWarning;
-        $hint = ["Provide a valid amount and payment method."];
+        $hint = ["Provide a valid amount, payment method, and account details."];
         $linktosolve = "https://";
         $api_status_code_class_call->respondBadRequest([], $text, $hint, $linktosolve, $errorcode);
         exit;
     }
 
     $amount = floatval($amount);
+    $wallet_balance = floatval($user_data['balance']);
+
     if ($amount < 100) {
-        $text = "Minimum deposit is ₦100.";
+        $text = "Minimum withdrawal is ₦100.";
         $errorcode = $api_error_code_class_call::$internalUserWarning;
         $hint = ["Increase the amount and try again."];
         $linktosolve = "https://";
@@ -50,33 +58,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $user_level = intval($user_data['userLevel']);
-    $limits = $api_users_table_class_call::userLevelLimits($user_level);
-
-    // 🔍 Get user’s current wallet balance and today’s total transactions
-    // $wallet_info = $api_users_table_class_call::getUserWallet($user_pubkey);
-    // $used_today = $api_users_table_class_call::getUserDailyTransactionsTotal($user_pubkey);
-
-    $wallet_balance = floatval($user_data['userBalance']);
-    $daily_limit = $limits['daily_transaction_limit'];
-    $max_balance = $limits['max_wallet_balance'];
-
-
-    if ($max_balance !== "Unlimited" && ($wallet_balance + $amount) > $max_balance) {
-        $text = "This deposit would exceed your wallet balance limit of ₦" . number_format($max_balance) . ".";
+    if ($amount > $wallet_balance) {
+        $text = "Insufficient wallet balance.";
         $errorcode = $api_error_code_class_call::$internalUserWarning;
-        $hint = ["Withdraw or upgrade to Level 2 for higher limits."];
+        $hint = ["Reduce withdrawal amount or fund wallet."];
         $linktosolve = "https://";
         $api_status_code_class_call->respondBadRequest([], $text, $hint, $linktosolve, $errorcode);
         exit;
     }
 
-    // 🧾 Create reference and store pending deposit
-    $reference = uniqid("DP-");
-    $stored = $api_users_table_class_call::storeDepositIntent($user_pubkey, $amount, $payment_method, $reference);
+    // Create unique withdrawal reference
+    $reference = uniqid("WD-");
+
+    // Store withdrawal request
+    $stored = $api_users_table_class_call::storeWithdrawalRequest($user_pubkey, $amount, $payment_method, $account_details, $reference);
 
     if (!$stored) {
-        $text = "Unable to initiate deposit.";
+        $text = "Unable to initiate withdrawal.";
         $errorcode = $api_error_code_class_call::$internalServerError;
         $hint = ["Try again later."];
         $linktosolve = "https://";
@@ -84,34 +82,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $email = $user_data['email'];
-    $fullname = $user_data['first_Name'] . ' ' . $user_data['last_Name'];
-
-    if ($payment_method === 'paystack') {
-        $payment_link = $api_users_table_class_call::generatePaystackLink($email, $amount, $fullname, $reference);
-    } elseif ($payment_method === 'monnify') {
-        $payment_link = $api_users_table_class_call::generateMonnifyLink($email, $amount, $fullname, $reference);
-    } else {
-        $text = "Invalid payment method.";
-        $errorcode = $api_error_code_class_call::$internalUserWarning;
-        $hint = ["Only 'paystack' or 'monnify' is allowed."];
-        $linktosolve = "https://";
-        $api_status_code_class_call->respondBadRequest([], $text, $hint, $linktosolve, $errorcode);
-        exit;
-    }
-
     $maindata = [
         "reference" => $reference,
-        "payment_link" => $payment_link
+        "amount" => $amount,
+        "payment_method" => $payment_method
     ];
-    $text = "Deposit initiated successfully. Complete payment using the link.";
+    $text = "Withdrawal request submitted. Processing may take some time.";
     $api_status_code_class_call->respondOK($maindata, $text);
     exit;
 
 } else {
     $text = $api_response_class_call::$methodUsedNotAllowed;
     $errorcode = $api_error_code_class_call::$internalHackerWarning;
-    $hint = ["Use POST method to make a deposit."];
+    $hint = ["Use POST method to request a withdrawal."];
     $linktosolve = "https://";
     $api_status_code_class_call->respondMethodNotAllowed([], $text, $hint, $linktosolve, $errorcode);
 }
