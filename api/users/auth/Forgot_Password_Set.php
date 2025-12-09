@@ -3,7 +3,6 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 
-// If the browser sends a preflight OPTIONS request, stop here and return OK
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
@@ -61,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $hashPassword = Utility_Functions::Password_encrypt($new_password);
 
     // Update the user's password in the database
-    $user_id = $api_users_table_class_call::updatePassword($email, $hashPassword);
+    $user_id = $api_users_table_class_call::updateForgotPassword($email, $hashPassword);
 
     if ($user_id) {
         // Respond with a success message

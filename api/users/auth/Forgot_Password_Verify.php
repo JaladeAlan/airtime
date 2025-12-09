@@ -23,12 +23,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $resetCode = isset($data->reset_code) ? intval($data->reset_code) : 0;
 
     // Validate input data (ensure a valid reset code)
-    if (!is_numeric($resetCode) || strlen($resetCode) != 4) {
+    if (!is_numeric($resetCode) || strlen($resetCode) != 6) {
         // Return an error response if the reset code is invalid
         $text = $api_response_class_call::$invalidResetData;
         $errorcode = $api_error_code_class_call::$internalUserWarning;
         $maindata = [];
-        $hint = ["Ensure to send a valid 4-digit reset code."];
+        $hint = ["Ensure to send a valid 6-digit reset code."];
         $linktosolve = "https://";
         $api_status_code_class_call->respondBadRequest($maindata, $text, $hint, $linktosolve, $errorcode);
         // Exit the script after sending the response

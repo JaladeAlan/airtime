@@ -521,6 +521,27 @@ class Users_Table extends Config\DB_Connect
                 return false;
             }
         }
+    public static function updateForgotPassword($email, $hashPassword)
+        {
+            // Input type checks if it's from post request or just a normal function call
+            $connect = static::getDB();
+                    
+        
+            // Prepare the SQL statement for updating the user's password
+            $updatePassword = $connect->prepare("UPDATE users SET user_password = ? WHERE email = ?");
+        
+            // Bind parameters and values
+            $updatePassword->bind_param("ss", $hashPassword, $email);
+        
+            // Execute the update query
+            if ($updatePassword->execute()) {
+                // Return true if the password was successfully updated
+                return true;
+            } else {
+                // Handle the case where the update query fails (e.g., return an error code or message)
+                return false;
+            }
+        }
     public static function updateAdminPassword($user_pubkey, $hashPassword)
         {
             // Input type checks if it's from post request or just a normal function call

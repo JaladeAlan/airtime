@@ -1,6 +1,10 @@
 <?php
 
 namespace Config;
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 use DatabaseCall\Users_Table;
 
@@ -607,6 +611,64 @@ class Utility_Functions  extends DB_Connect
         ];
     }
 
-}
+    public static function send_email($to, $subject, $htmlMessage, $altMessage = '')
+        {
+            $mail = new PHPMailer(true);
+            try {
+                $mail->isSMTP();
+                $mail->Host       = 'smtp.yourprovider.com';   
+                $mail->SMTPAuth   = true;
+                $mail->Username   = 'your_email@domain.com';    
+                $mail->Password   = 'your_smtp_password';      
+                $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS; 
+                $mail->Port       = 587;  // or 465 for SSL/TLS
 
+                // Recipients & sender info
+                $mail->setFrom('no-reply@yourdomain.com', 'Airtime Ng');
+                $mail->addAddress($to);          
+                $mail->addReplyTo('no-reply@yourdomain.com', 'No Reply');
+
+                // Content
+                $mail->isHTML(true);
+                $mail->Subject = $subject;
+                $mail->Body    = $htmlMessage;
+                
+                if ($altMessage !== '') {
+                    $mail->AltBody = $altMessage;
+                }
+
+                $mail->send();
+                return true;
+            } catch (Exception $e) {
+                return false;
+            }
+    }
+
+    public static function send_test_email($to, $subject, $body, $from = 'no-reply@example.com', $from_name = 'AirTime App') {
+
+        $mail = new PHPMailer(true);
+        try {
+            //Server settings
+            $mail->isSMTP();
+            $mail->Host       = '127.0.0.1';    // MailHog default
+            $mail->Port       = 1025;           // MailHog SMTP port
+            $mail->SMTPAuth   = false;          // No auth needed for MailHog
+
+            //Recipients
+            $mail->setFrom($from, $from_name);
+            $mail->addAddress($to);
+
+            // Content
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body    = $body;
+
+            $mail->send();
+            return true;
+        } catch (Exception $e) {
+            error_log("Email could not be sent. PHPMailer Error: {$mail->ErrorInfo}");
+            return false;
+        }
+    }
+}
     ?>
