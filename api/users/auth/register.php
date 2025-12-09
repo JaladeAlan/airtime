@@ -9,13 +9,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// --- ✅ Content type header ---
 header('Content-Type: application/json');
 
 use Config\Utility_Functions;
 require_once '../../../config/bootstrap_file.php';
 
-// --- Your existing POST logic below ---
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Get the request body
     $request_body = file_get_contents('php://input');
