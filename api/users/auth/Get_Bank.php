@@ -17,7 +17,6 @@ require_once '../../../config/bootstrap_file.php';
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     try {
-        // Assuming you have a method in your users table class to fetch banks
         $banks = $api_users_table_class_call::getAllBanks(); 
 
         if (!$banks || count($banks) === 0) {
@@ -31,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         // Return banks
         $text = "Banks retrieved successfully.";
-        $maindata = $banks; // send array of banks
+        $maindata = $banks; 
         $api_status_code_class_call->respondOK($maindata, $text);
         exit;
 
